@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>遊戲素材去背助手</title>
+  <meta name="description" content="本地瀏覽器遊戲素材去背助手，支援黑底、白底、綠幕、棋盤格與吸色背景，並提供點選補修與批量透明 PNG 匯出。">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">本機處理 / 不上傳圖片</p>
+        <h1>遊戲素材去背助手</h1>
+      </div>
+      <div class="actions">
+        <label class="button primary">
+          匯入圖片
+          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+        </label>
+        <button id="exportCurrent" type="button">匯出目前 PNG</button>
+        <button id="exportZip" type="button">批量匯出 ZIP</button>
+      </div>
+    </header>
+
+    <section class="status-grid" aria-label="批量狀態">
+      <div>
+        <span>張數</span>
+        <strong id="countStat">0 / 10</strong>
+      </div>
+      <div>
+        <span>最大解析度</span>
+        <strong id="maxSizeStat">-</strong>
+      </div>
+      <div>
+        <span>總像素</span>
+        <strong id="pixelStat">-</strong>
+      </div>
+      <div>
+        <span>效能風險</span>
+        <strong id="riskStat">待匯入</strong>
+      </div>
+    </section>
+
+    <section id="riskPanel" class="notice" hidden></section>
+
+    <section id="dropZone" class="workspace">
+      <aside class="queue" aria-label="圖片清單">
+        <div class="panel-head">
+          <h2>圖片清單</h2>
+          <button id="clearAll" type="button">清空</button>
+        </div>
+        <div id="thumbList" class="thumb-list">
+          <div class="empty">拖放圖片到這裡，或按上方匯入圖片。</div>
+        </div>
+      </aside>
+
+      <section class="preview-panel" aria-label="預覽">
+        <div class="panel-head">
+          <h2 id="previewTitle">預覽</h2>
+          <div class="segmented" role="group" aria-label="預覽模式">
+            <button class="active" type="button" data-view="result">結果</button>
+            <button type="button" data-view="mask">黑白範圍</button>
+            <button type="button" data-view="original">原圖</button>
+          </div>
+        </div>
+        <div id="canvasWrap" class="canvas-wrap checker">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+        <div class="preview-tools">
+          <label>
+            預覽底色
+            <select id="previewBg">
+              <option value="checker">棋盤</option>
+              <option value="game">遊戲深色</option>
+              <option value="black">黑色</option>
+              <option value="white">白色</option>
+            </select>
+          </label>
+          <label class="inline-check">
+            <input id="lowMemory" type="checkbox" checked>
+            低記憶體模式
+          </label>
+        </div>
+        <div class="quick-controls" aria-label="常用調整">
+          <div class="preset-row quick-presets">
+            <button type="button" data-preset="blackFx">黑底物件</button>
+            <button type="button" data-preset="smoke">煙霧光效</button>
+            <button type="button" data-preset="glass">玻璃透鏡</button>
+            <button type="button" data-preset="green">綠幕素材</button>
+          </div>
+          <div class="slider">
+            <label for="interiorCleanup">清除強度 <strong id="interiorCleanupValue">0.45</strong></label>
+            <input id="interiorCleanup" type="range" min="0" max="1" step="0.05" value="0.45">
+          </div>
+          <div class="slider">
+            <label for="solidProtect">保留細節 <strong id="solidProtectValue">0.55</strong></label>
+            <input id="solidProtect" type="range" min="0" max="1" step="0.05" value="0.55">
+          </div>
+          <div class="slider">
+            <label for="feather">邊緣柔和 <strong id="featherValue">0</strong></label>
+            <input id="feather" type="range" min="0" max="8" step="1" value="0">
+          </div>
+          <label class="inline-check region-check">
+            <input id="smartEdgeCleanup" type="checkbox" checked>
+            智能修邊
+          </label>
+          <div class="slider">
+            <label for="edgeCleanupStrength">修邊強度 <strong id="edgeCleanupStrengthValue">0.75</strong></label>
+            <input id="edgeCleanupStrength" type="range" min="0" max="1" step="0.05" value="0.75">
+          </div>
+        </div>
+      </section>
+
+      <aside class="controls" aria-label="去背設定">
+        <div class="panel-head">
+        <h2>去背設定</h2>
+          <button id="resetSettings" type="button">重設</button>
+        </div>
+
+        <label class="field">
+          背景是哪一種
+          <select id="mode">
+            <option value="black">黑底</option>
+            <option value="white">白底</option>
+            <option value="green">綠幕</option>
+            <option value="checker">棋盤格</option>
+            <option value="custom">自己選背景色</option>
+          </select>
+        </label>
+
+        <label class="field">
+          圖片類型
+          <select id="alphaMode">
+            <option value="mixed">混合：有實體也有玻璃/光效</option>
+            <option value="effect">煙霧/光效為主</option>
+            <option value="cutout">實體物件為主</option>
+          </select>
+        </label>
+
+        <div class="field color-row">
+          <label>
+            背景色
+            <input id="customColor" type="color" value="#000000">
+          </label>
+          <button id="sampleCorner" type="button">從四角估算</button>
+        </div>
+
+        <div class="region-box">
+          <h3>哪裡需要補修</h3>
+          <label class="field">
+            點圖時要做什麼
+            <select id="regionTool">
+              <option value="none">只看預覽</option>
+              <option value="clear">點一下清殘留</option>
+              <option value="glass">這裡是玻璃/煙霧</option>
+              <option value="protect">這裡不要動</option>
+            </select>
+          </label>
+          <label class="field">
+            怎麼找範圍
+            <select id="selectMode">
+              <option value="connected">只找相連區域</option>
+              <option value="similar">找整張相近顏色</option>
+            </select>
+          </label>
+          <div class="slider">
+            <label for="regionTolerance">點選範圍 <strong id="regionToleranceValue">0.12</strong></label>
+            <input id="regionTolerance" type="range" min="0.02" max="0.6" step="0.01" value="0.12">
+          </div>
+          <label class="inline-check region-check">
+            <input id="autoDarkCleanup" type="checkbox" checked>
+            自動清小黑點
+          </label>
+          <div class="slider">
+            <label for="darkThreshold">小黑點敏感度 <strong id="darkThresholdValue">0.12</strong></label>
+            <input id="darkThreshold" type="range" min="0.02" max="0.45" step="0.01" value="0.12">
+          </div>
+          <div class="slider">
+            <label for="darkIslandMax">小黑點大小上限 <strong id="darkIslandMaxValue">600</strong></label>
+            <input id="darkIslandMax" type="range" min="20" max="5000" step="20" value="600">
+          </div>
+          <div class="region-actions">
+            <button id="undoRegion" type="button">撤銷上一筆</button>
+            <button id="clearRegions" type="button">清除區域</button>
+          </div>
+          <p id="regionSummary" class="region-summary">尚未標記區域。</p>
+        </div>
+
+        <details class="advanced-box">
+          <summary>進階微調</summary>
+          <div class="slider">
+            <label for="exposure">淡光保留 <strong id="exposureValue">0.00</strong></label>
+            <input id="exposure" type="range" min="-2" max="2" step="0.05" value="0">
+          </div>
+          <div class="slider">
+            <label for="gamma">透明層次 <strong id="gammaValue">1.00</strong></label>
+            <input id="gamma" type="range" min="0.3" max="3" step="0.05" value="1">
+          </div>
+          <div class="slider">
+            <label for="blackPoint">壓掉黑底 <strong id="blackPointValue">0.02</strong></label>
+            <input id="blackPoint" type="range" min="0" max="0.8" step="0.01" value="0.02">
+          </div>
+          <div class="slider">
+            <label for="whitePoint">亮部保留 <strong id="whitePointValue">1.00</strong></label>
+            <input id="whitePoint" type="range" min="0.2" max="1" step="0.01" value="1">
+          </div>
+          <div class="slider">
+            <label for="alphaStrength">透明強度 <strong id="alphaStrengthValue">1.00</strong></label>
+            <input id="alphaStrength" type="range" min="0.2" max="2" step="0.05" value="1">
+          </div>
+          <div class="slider">
+            <label for="tolerance">背景判定範圍 <strong id="toleranceValue">0.22</strong></label>
+            <input id="tolerance" type="range" min="0.02" max="0.8" step="0.01" value="0.22">
+          </div>
+          <div class="slider">
+            <label for="despill">去綠/青色邊 <strong id="despillValue">0.45</strong></label>
+            <input id="despill" type="range" min="0" max="1" step="0.05" value="0.45">
+          </div>
+        </details>
+
+      </aside>
+    </section>
+
+    <footer class="foot">
+      <span id="message">所有處理都在本機瀏覽器完成，不會上傳圖片。</span>
+    </footer>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
