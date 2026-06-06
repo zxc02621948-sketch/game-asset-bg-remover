@@ -5,6 +5,9 @@ const SOFT_FILE_MB = 20;
 const HARD_PIXELS = 67_000_000;
 const SOFT_TOTAL_PIXELS = 60_000_000;
 const HARD_TOTAL_PIXELS = 200_000_000;
+const ALIGN_TOOL_URL = "https://zxc02621948-sketch.github.io/ai-sprite-align-tool/";
+const BRIDGE_DB_NAME = "gameAssetToolBridge";
+const BRIDGE_STORE_NAME = "assets";
 
 const state = {
   items: [],
@@ -33,6 +36,7 @@ const el = {
   previewBg: document.getElementById("previewBg"),
   lowMemory: document.getElementById("lowMemory"),
   message: document.getElementById("message"),
+  sendToAlign: document.getElementById("sendToAlign"),
   mode: document.getElementById("mode"),
   customColor: document.getElementById("customColor"),
   sampleCorner: document.getElementById("sampleCorner"),
@@ -213,6 +217,7 @@ el.resetSettings.addEventListener("click", () => {
 });
 el.sampleCorner.addEventListener("click", sampleCornerColor);
 el.exportCurrent.addEventListener("click", exportCurrent);
+el.sendToAlign.addEventListener("click", sendCurrentToAlignTool);
 el.exportZip.addEventListener("click", exportZip);
 el.previewCanvas.addEventListener("click", handlePreviewClick);
 el.undoRegion.addEventListener("click", undoRegion);
@@ -1156,6 +1161,34 @@ async function exportCurrent() {
   }
 }
 
+async function sendCurrentToAlignTool() {
+  const item = selectedItem();
+  if (!item || state.busy) return;
+  state.busy = true;
+  setButtonsDisabled(true);
+  setMessage("正在準備送到動畫格對齊工具...");
+  try {
+    const blob = await processItemToBlob(item);
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await saveBridgeAsset({
+      id,
+      name: outputName(item.name, ".png"),
+      type: "image/png",
+      blob,
+      createdAt: Date.now(),
+      source: "game-asset-bg-remover",
+    });
+    const url = new URL(ALIGN_TOOL_URL);
+    url.searchParams.set("asset", id);
+    window.location.href = url.toString();
+  } catch (error) {
+    console.error(error);
+    setMessage("送出失敗，請改用匯出 PNG 後再匯入動畫格對齊工具。");
+    state.busy = false;
+    setButtonsDisabled(false);
+  }
+}
+
 async function exportZip() {
   if (!state.items.length || state.busy) return;
   state.busy = true;
@@ -1177,6 +1210,36 @@ async function exportZip() {
     state.busy = false;
     setButtonsDisabled(false);
   }
+}
+
+async function saveBridgeAsset(record) {
+  const db = await openBridgeDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BRIDGE_STORE_NAME, "readwrite");
+    tx.objectStore(BRIDGE_STORE_NAME).put(record);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+function openBridgeDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(BRIDGE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(BRIDGE_STORE_NAME)) {
+        db.createObjectStore(BRIDGE_STORE_NAME, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }
 
 async function processItemToBlob(item) {
@@ -1254,6 +1317,7 @@ function syncPreviewBackground() {
 
 function setButtonsDisabled(disabled) {
   el.exportCurrent.disabled = disabled || !state.items.length;
+  el.sendToAlign.disabled = disabled || !state.items.length;
   el.exportZip.disabled = disabled || !state.items.length;
   el.fileInput.disabled = disabled;
 }
