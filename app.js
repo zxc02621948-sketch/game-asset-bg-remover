@@ -229,6 +229,7 @@ updateStats();
 syncPreviewBackground();
 drawEmptyPreview();
 setButtonsDisabled(false);
+loadBridgeAssetFromQuery();
 
 async function handleFiles(files) {
   if (state.busy) return;
@@ -1228,6 +1229,38 @@ async function saveBridgeAsset(record) {
   });
 }
 
+async function getBridgeAsset(id) {
+  const db = await openBridgeDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BRIDGE_STORE_NAME, "readonly");
+    const request = tx.objectStore(BRIDGE_STORE_NAME).get(id);
+    request.onsuccess = () => {
+      db.close();
+      resolve(request.result);
+    };
+    request.onerror = () => {
+      db.close();
+      reject(request.error);
+    };
+  });
+}
+
+async function deleteBridgeAsset(id) {
+  const db = await openBridgeDb();
+  return new Promise((resolve) => {
+    const tx = db.transaction(BRIDGE_STORE_NAME, "readwrite");
+    tx.objectStore(BRIDGE_STORE_NAME).delete(id);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      resolve();
+    };
+  });
+}
+
 function openBridgeDb() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(BRIDGE_DB_NAME, 1);
@@ -1240,6 +1273,31 @@ function openBridgeDb() {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+async function loadBridgeAssetFromQuery() {
+  const id = new URLSearchParams(window.location.search).get("asset");
+  if (!id) return;
+  try {
+    setMessage("正在接收動畫格對齊工具送來的圖片...");
+    const record = await getBridgeAsset(id);
+    if (!record?.blob) {
+      setMessage("找不到傳送過來的圖片，請從動畫格對齊工具重新送出。");
+      return;
+    }
+    const file = new File([record.blob], record.name || "spritesheet_for_bg_remover.png", {
+      type: record.type || record.blob.type || "image/png",
+    });
+    await handleFiles([file]);
+    await deleteBridgeAsset(id);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("asset");
+    history.replaceState(null, "", url.toString());
+    setMessage("已接收動畫格對齊工具送來的圖片。");
+  } catch (error) {
+    console.error(error);
+    setMessage("接收圖片失敗，請改用匯入 PNG。");
+  }
 }
 
 async function processItemToBlob(item) {
