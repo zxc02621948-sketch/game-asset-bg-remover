@@ -86,38 +86,56 @@ const presets = {
   blackFx: {
     mode: "black",
     alphaMode: "mixed",
-    exposure: 0.35,
-    gamma: 0.85,
-    blackPoint: 0.03,
-    whitePoint: 0.95,
-    alphaStrength: 1.15,
-    interiorCleanup: 0.45,
-    solidProtect: 0.55,
-    darkThreshold: 0.12,
-    darkIslandMax: 600,
-    edgeCleanupStrength: 0.65,
-    feather: 1,
-    tolerance: 0.22,
-    despill: 0.2,
+    exposure: 0.15,
+    gamma: 1,
+    blackPoint: 0.01,
+    whitePoint: 1,
+    alphaStrength: 1,
+    interiorCleanup: 0.15,
+    solidProtect: 0.95,
+    darkThreshold: 0.08,
+    darkIslandMax: 360,
+    edgeCleanupStrength: 0.55,
+    feather: 0,
+    tolerance: 0.18,
+    despill: 0.1,
     customColor: "#000000",
   },
   smoke: {
     mode: "black",
-    alphaMode: "effect",
-    exposure: 0.65,
-    gamma: 0.7,
-    blackPoint: 0.015,
-    whitePoint: 0.82,
-    alphaStrength: 1.3,
-    interiorCleanup: 1,
-    solidProtect: 0,
+    alphaMode: "mixed",
+    exposure: 0.45,
+    gamma: 0.85,
+    blackPoint: 0.02,
+    whitePoint: 0.9,
+    alphaStrength: 1,
+    interiorCleanup: 0.75,
+    solidProtect: 0.65,
     darkThreshold: 0.16,
     darkIslandMax: 1200,
-    edgeCleanupStrength: 0.7,
-    feather: 2,
+    edgeCleanupStrength: 0.3,
+    feather: 1,
     tolerance: 0.22,
     despill: 0.15,
     customColor: "#000000",
+  },
+  checker: {
+    mode: "checker",
+    alphaMode: "cutout",
+    exposure: 0,
+    gamma: 1,
+    blackPoint: 0.02,
+    whitePoint: 0.95,
+    alphaStrength: 1.05,
+    interiorCleanup: 0.25,
+    solidProtect: 0.75,
+    darkThreshold: 0.12,
+    darkIslandMax: 600,
+    edgeCleanupStrength: 0.75,
+    feather: 0,
+    tolerance: 0.32,
+    despill: 0.05,
+    customColor: "#f0f0f0",
   },
   glass: {
     mode: "white",
@@ -202,12 +220,18 @@ for (const id of sliderIds) {
   });
 }
 
-for (const input of [el.mode, el.alphaMode, el.regionTool, el.selectMode, el.autoDarkCleanup, el.smartEdgeCleanup, el.customColor, el.previewBg, el.lowMemory]) {
+for (const input of [el.mode, el.alphaMode, el.regionTool, el.selectMode, el.autoDarkCleanup, el.smartEdgeCleanup, el.previewBg, el.lowMemory]) {
   input.addEventListener("change", () => {
     syncPreviewBackground();
     scheduleRender();
   });
 }
+
+el.customColor.addEventListener("input", () => {
+  el.mode.value = "custom";
+  updateActivePresetButtons("custom");
+  scheduleRender();
+});
 
 el.clearAll.addEventListener("click", clearAll);
 el.resetSettings.addEventListener("click", () => {
@@ -658,12 +682,9 @@ function solvePixel(rgb, settings, checker, isEdgeBackground) {
   }
 
   if (settings.mode === "checker" && checker) {
-    const d1 = colorDistance(rgb, checker.a);
-    const d2 = colorDistance(rgb, checker.b);
-    bg = d1 <= d2 ? checker.a : checker.b;
-    rawAlpha = smoothstep(settings.tolerance * 0.15, settings.tolerance, Math.min(d1, d2));
+    rawAlpha = alphaForCheckerPixel(rgb, checker, settings);
     const alpha = alphaByMaterialMode(rawAlpha, rawAlpha, settings, rgb, isEdgeBackground);
-    color = unmixBackground(rgb, bg, alpha);
+    color = rgb;
     return { alpha, color };
   }
 
@@ -803,7 +824,7 @@ function isBackgroundPixel(data, offset, settings, checker) {
     return colorDistance(rgb, [0, 1, 0]) <= settings.tolerance || greenScreenSpillScore(rgb) >= 0.34;
   }
   if (settings.mode === "checker" && checker) {
-    return Math.min(colorDistance(rgb, checker.a), colorDistance(rgb, checker.b)) <= edgeBackgroundLimit(settings, 0.65, 0.22);
+    return isCheckerBackgroundLike(rgb, checker, settings, edgeBackgroundLimit(settings, 0.9, 0.3));
   }
   return colorDistance(rgb, settings.bg) <= edgeBackgroundLimit(settings, 0.7, 0.28);
 }
@@ -1079,28 +1100,32 @@ function blurAlpha(alpha, width, height, radius) {
 
 function detectCheckerColors(imageData) {
   const samples = [];
-  const stepX = Math.max(1, Math.floor(imageData.width / 16));
-  const stepY = Math.max(1, Math.floor(imageData.height / 16));
+  const stepX = Math.max(1, Math.floor(imageData.width / 200));
+  const stepY = Math.max(1, Math.floor(imageData.height / 200));
+  const border = Math.max(2, Math.floor(Math.min(imageData.width, imageData.height) * 0.08));
   for (let y = 0; y < imageData.height; y += stepY) {
     for (let x = 0; x < imageData.width; x += stepX) {
       const i = (y * imageData.width + x) * 4;
-      samples.push([
+      const sample = [
         imageData.data[i] / 255,
         imageData.data[i + 1] / 255,
         imageData.data[i + 2] / 255,
-      ]);
+      ];
+      const nearEdge = x < border || y < border || x >= imageData.width - border || y >= imageData.height - border;
+      if (nearEdge || saturation(sample) < 0.28) samples.push(sample);
+      if (nearEdge) samples.push(sample);
     }
   }
 
-  let a = samples[0] || [0.75, 0.75, 0.75];
-  let b = samples.reduce((best, sample) => (
-    colorDistance(sample, a) > colorDistance(best, a) ? sample : best
-  ), a);
+  const seedSamples = samples.length ? samples : [[0.72, 0.72, 0.72], [0.92, 0.92, 0.92]];
+  const seed = findDominantCheckerSeeds(seedSamples);
+  let { a, b } = seed;
+  const clusterSamples = seed.samples;
 
   for (let iter = 0; iter < 5; iter++) {
     const groupA = [];
     const groupB = [];
-    for (const sample of samples) {
+    for (const sample of clusterSamples) {
       (colorDistance(sample, a) <= colorDistance(sample, b) ? groupA : groupB).push(sample);
     }
     if (groupA.length) a = averageColor(groupA);
@@ -1108,6 +1133,87 @@ function detectCheckerColors(imageData) {
   }
 
   return { a, b };
+}
+
+function findDominantCheckerSeeds(samples) {
+  const neutral = samples.filter((sample) => saturation(sample) < 0.32);
+  const midNeutral = neutral.filter((sample) => {
+    const l = luminance(sample);
+    return l >= 0.1 && l <= 0.995;
+  });
+  const source = midNeutral.length >= 24 ? midNeutral : neutral.length >= 12 ? neutral : samples;
+  const bins = Array.from({ length: 32 }, (_, bin) => ({ bin, count: 0, sum: [0, 0, 0], samples: [] }));
+
+  for (const sample of source) {
+    const bin = Math.max(0, Math.min(31, Math.floor(luminance(sample) * 32)));
+    const bucket = bins[bin];
+    bucket.count++;
+    bucket.sum[0] += sample[0];
+    bucket.sum[1] += sample[1];
+    bucket.sum[2] += sample[2];
+    bucket.samples.push(sample);
+  }
+
+  const ranked = bins.filter((bucket) => bucket.count > 0).sort((a, b) => b.count - a.count);
+  const first = ranked[0];
+  if (!first) {
+    return { a: [0.72, 0.72, 0.72], b: [0.92, 0.92, 0.92], samples };
+  }
+
+  const enoughSamples = Math.max(12, first.count * 0.03);
+  const second = ranked.find((bucket) => bucket !== first && bucket.count >= enoughSamples)
+    || ranked.find((bucket) => Math.abs(bucket.bin - first.bin) >= 4)
+    || ranked.find((bucket) => bucket !== first)
+    || first;
+
+  const a = averageBucket(first);
+  const b = averageBucket(second);
+  return { a, b, samples: source };
+}
+
+function averageBucket(bucket) {
+  if (!bucket.count) return [0.75, 0.75, 0.75];
+  return bucket.sum.map((value) => value / bucket.count);
+}
+
+function alphaForCheckerPixel(rgb, checker, settings) {
+  const distance = checkerBackgroundDistance(rgb, checker);
+  const backgroundBand = Math.max(settings.tolerance * 0.34, 0.08);
+  const alpha = smoothstep(backgroundBand, settings.tolerance * 1.25, distance);
+  if (distance < backgroundBand) return 0;
+  const foregroundProtect = checkerForegroundProtect(rgb, checker);
+  if (foregroundProtect > 0.72) return 1;
+  return clamp01(Math.max(alpha, foregroundProtect * 0.95));
+}
+
+function isCheckerBackgroundLike(rgb, checker, settings, limit) {
+  if (checkerBackgroundDistance(rgb, checker) > limit) return false;
+  return checkerForegroundProtect(rgb, checker) < 0.35;
+}
+
+function checkerBackgroundDistance(rgb, checker) {
+  const nearest = Math.min(colorDistance(rgb, checker.a), colorDistance(rgb, checker.b));
+  const line = distanceToColorSegment(rgb, checker.a, checker.b);
+  return Math.min(nearest, line * 1.15);
+}
+
+function checkerForegroundProtect(rgb, checker) {
+  const l = luminance(rgb);
+  const la = luminance(checker.a);
+  const lb = luminance(checker.b);
+  const low = Math.min(la, lb);
+  const darkInk = 1 - smoothstep(low - 0.08, low + 0.015, l);
+  const colorInk = smoothstep(0.18, 0.45, saturation(rgb));
+  return clamp01(Math.max(darkInk, colorInk));
+}
+
+function distanceToColorSegment(rgb, a, b) {
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const ap = [rgb[0] - a[0], rgb[1] - a[1], rgb[2] - a[2]];
+  const len2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+  if (len2 <= 0.000001) return colorDistance(rgb, a);
+  const t = clamp01((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / len2);
+  return colorDistance(rgb, [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t]);
 }
 
 function averageColor(colors) {
@@ -1142,6 +1248,7 @@ function sampleCornerColor() {
   const hex = rgbToHex(color.map((value) => Math.round(value / points.length)));
   el.customColor.value = hex;
   el.mode.value = "custom";
+  updateActivePresetButtons("custom");
   setMessage(`已從四角估算背景色：${hex}`);
   scheduleRender();
 }
@@ -1318,6 +1425,7 @@ function clearAll() {
   updateStats();
   updateRegionSummary();
   drawEmptyPreview();
+  setButtonsDisabled(false);
   setMessage("已清空圖片。");
 }
 
@@ -1357,6 +1465,14 @@ function applyPreset(name) {
     el[id].value = preset[id];
   }
   updateSliderLabels();
+  updateActivePresetButtons(name);
+}
+
+function updateActivePresetButtons(activeName) {
+  document.querySelectorAll("[data-preset]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.preset === activeName);
+  });
+  el.sampleCorner.classList.toggle("active", activeName === "custom");
 }
 
 function updateSliderLabels() {
@@ -1377,6 +1493,7 @@ function setButtonsDisabled(disabled) {
   el.exportCurrent.disabled = disabled || !state.items.length;
   el.sendToAlign.disabled = disabled || !state.items.length;
   el.exportZip.disabled = disabled || !state.items.length;
+  el.sampleCorner.disabled = disabled || !state.items.length;
   el.fileInput.disabled = disabled;
 }
 
@@ -1406,6 +1523,12 @@ function smoothstep(edge0, edge1, x) {
 
 function luminance(rgb) {
   return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+}
+
+function saturation(rgb) {
+  const max = Math.max(rgb[0], rgb[1], rgb[2]);
+  const min = Math.min(rgb[0], rgb[1], rgb[2]);
+  return max > 0.001 ? (max - min) / max : 0;
 }
 
 function lerp(a, b, t) {

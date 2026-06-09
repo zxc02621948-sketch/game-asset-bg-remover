@@ -412,6 +412,36 @@ canvas {
   margin-top: 18px;
 }
 
+.mode-presets {
+  margin-top: 0;
+}
+
+.preset-row button.active,
+#sampleCorner.active {
+  border-color: var(--accent);
+  background: rgba(118, 214, 191, 0.18);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(118, 214, 191, 0.25);
+}
+
+.field-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.advanced-color {
+  grid-template-columns: 1fr;
+  margin: 4px 13px 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.advanced-box .advanced-color + .slider {
+  padding-top: 4px;
+}
+
 .region-box {
   margin: 18px 0;
   padding: 14px;

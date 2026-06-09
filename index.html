@@ -85,12 +85,6 @@
           </label>
         </div>
         <div class="quick-controls" aria-label="常用調整">
-          <div class="preset-row quick-presets">
-            <button type="button" data-preset="blackFx">黑底物件</button>
-            <button type="button" data-preset="smoke">煙霧光效</button>
-            <button type="button" data-preset="glass">玻璃透鏡</button>
-            <button type="button" data-preset="green">綠幕素材</button>
-          </div>
           <div class="slider">
             <label for="interiorCleanup">清除強度 <strong id="interiorCleanupValue">0.45</strong></label>
             <input id="interiorCleanup" type="range" min="0" max="1" step="0.05" value="0.45">
@@ -120,16 +114,20 @@
           <button id="resetSettings" type="button">重設</button>
         </div>
 
-        <label class="field">
-          背景是哪一種
-          <select id="mode">
-            <option value="black">黑底</option>
-            <option value="white">白底</option>
-            <option value="green">綠幕</option>
-            <option value="checker">棋盤格</option>
-            <option value="custom">自己選背景色</option>
-          </select>
-        </label>
+        <input id="mode" type="hidden" value="black">
+
+        <div class="field mode-field">
+          <span>背景處理</span>
+          <div class="preset-row mode-presets" role="group" aria-label="背景處理">
+            <button type="button" data-preset="blackFx">黑底物件</button>
+            <button type="button" data-preset="smoke">煙霧光效</button>
+            <button type="button" data-preset="checker">棋盤背景</button>
+            <button type="button" data-preset="glass">白底/玻璃</button>
+            <button type="button" data-preset="green">綠幕素材</button>
+            <button id="sampleCorner" type="button">四角估算</button>
+          </div>
+          <small class="field-note">整體變半透明時改用黑底物件；真的要保留煙霧、火光、魔法光效時才用煙霧光效。</small>
+        </div>
 
         <label class="field">
           圖片類型
@@ -139,14 +137,6 @@
             <option value="cutout">實體物件為主</option>
           </select>
         </label>
-
-        <div class="field color-row">
-          <label>
-            背景色
-            <input id="customColor" type="color" value="#000000">
-          </label>
-          <button id="sampleCorner" type="button">從四角估算</button>
-        </div>
 
         <div class="region-box">
           <h3>哪裡需要補修</h3>
@@ -191,6 +181,13 @@
 
         <details class="advanced-box">
           <summary>進階微調</summary>
+          <div class="field color-row advanced-color">
+            <label>
+              特殊背景色
+              <input id="customColor" type="color" value="#000000">
+            </label>
+            <span class="field-note">通常不需要手選；選色後會切換成自訂背景模式。</span>
+          </div>
           <div class="slider">
             <label for="exposure">淡光保留 <strong id="exposureValue">0.00</strong></label>
             <input id="exposure" type="range" min="-2" max="2" step="0.05" value="0">
