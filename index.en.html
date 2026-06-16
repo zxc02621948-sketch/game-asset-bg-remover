@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Asset BG Remover</title>
+  <meta name="description" content="A local, in-browser game-asset background remover supporting black, white, green-screen, checkerboard, and color-pick backgrounds, with click-to-touch-up and batch transparent-PNG export.">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Runs locally / images never uploaded</p>
+        <h1>Game Asset BG Remover</h1>
+        <a class="lang-switch" href="./index.html">中文</a>
+      </div>
+      <div class="actions">
+        <label class="button primary">
+          Import Images
+          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+        </label>
+        <button id="exportCurrent" type="button">Export Current PNG</button>
+        <button id="sendToAlign" type="button">Send to Frame Align</button>
+        <button id="exportZip" type="button">Batch Export ZIP</button>
+      </div>
+    </header>
+
+    <section class="status-grid" aria-label="Batch status">
+      <div>
+        <span>Images</span>
+        <strong id="countStat">0 / 10</strong>
+      </div>
+      <div>
+        <span>Max resolution</span>
+        <strong id="maxSizeStat">-</strong>
+      </div>
+      <div>
+        <span>Total pixels</span>
+        <strong id="pixelStat">-</strong>
+      </div>
+      <div>
+        <span>Performance risk</span>
+        <strong id="riskStat">Awaiting import</strong>
+      </div>
+    </section>
+
+    <section id="riskPanel" class="notice" hidden></section>
+
+    <section id="dropZone" class="workspace">
+      <aside class="queue" aria-label="Image list">
+        <div class="panel-head">
+          <h2>Image list</h2>
+          <button id="clearAll" type="button">Clear</button>
+        </div>
+        <div id="thumbList" class="thumb-list">
+          <div class="empty">Drop images here, or use Import above.</div>
+        </div>
+      </aside>
+
+      <section class="preview-panel" aria-label="Preview">
+        <div class="panel-head">
+          <h2 id="previewTitle">Preview</h2>
+          <div class="segmented" role="group" aria-label="Preview mode">
+            <button class="active" type="button" data-view="result">Result</button>
+            <button type="button" data-view="mask">Mask</button>
+            <button type="button" data-view="original">Original</button>
+          </div>
+        </div>
+        <div id="canvasWrap" class="canvas-wrap checker">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+        <div class="preview-tools">
+          <label>
+            Preview backdrop
+            <select id="previewBg">
+              <option value="checker">Checker</option>
+              <option value="game">Game dark</option>
+              <option value="black">Black</option>
+              <option value="white">White</option>
+            </select>
+          </label>
+          <label class="inline-check">
+            <input id="lowMemory" type="checkbox" checked>
+            Low-memory mode
+          </label>
+        </div>
+        <div class="quick-controls" aria-label="Common adjustments">
+          <div class="slider">
+            <label for="interiorCleanup">Cleanup strength <strong id="interiorCleanupValue">0.45</strong></label>
+            <input id="interiorCleanup" type="range" min="0" max="1" step="0.05" value="0.45">
+          </div>
+          <div class="slider">
+            <label for="solidProtect">Keep detail <strong id="solidProtectValue">0.55</strong></label>
+            <input id="solidProtect" type="range" min="0" max="1" step="0.05" value="0.55">
+          </div>
+          <div class="slider">
+            <label for="feather">Edge softness <strong id="featherValue">0</strong></label>
+            <input id="feather" type="range" min="0" max="8" step="1" value="0">
+          </div>
+          <label class="inline-check region-check">
+            <input id="smartEdgeCleanup" type="checkbox" checked>
+            Smart edge cleanup
+          </label>
+          <div class="slider">
+            <label for="edgeCleanupStrength">Edge cleanup strength <strong id="edgeCleanupStrengthValue">0.75</strong></label>
+            <input id="edgeCleanupStrength" type="range" min="0" max="1" step="0.05" value="0.75">
+          </div>
+        </div>
+      </section>
+
+      <aside class="controls" aria-label="Removal settings">
+        <div class="panel-head">
+        <h2>Removal settings</h2>
+          <button id="resetSettings" type="button">Reset</button>
+        </div>
+
+        <input id="mode" type="hidden" value="black">
+
+        <div class="field mode-field">
+          <span>Background handling</span>
+          <div class="preset-row mode-presets" role="group" aria-label="Background handling">
+            <button type="button" data-preset="blackFx">Black-bg object</button>
+            <button type="button" data-preset="smoke">Smoke / glow</button>
+            <button type="button" data-preset="checker">Checkerboard bg</button>
+            <button type="button" data-preset="glass">White / glass</button>
+            <button type="button" data-preset="green">Green screen</button>
+            <button id="sampleCorner" type="button">Sample corners</button>
+          </div>
+          <small class="field-note">If the whole image goes semi-transparent, switch to Black-bg object; only use Smoke / glow when you really need to keep smoke, fire, or magic effects.</small>
+        </div>
+
+        <label class="field">
+          Image type
+          <select id="alphaMode">
+            <option value="mixed">Mixed: solid plus glass / glow</option>
+            <option value="effect">Mostly smoke / glow</option>
+            <option value="cutout">Mostly solid objects</option>
+          </select>
+        </label>
+
+        <div class="region-box">
+          <h3>Where to touch up</h3>
+          <label class="field">
+            On click, do
+            <select id="regionTool">
+              <option value="none">Preview only</option>
+              <option value="clear">Click to clear residue</option>
+              <option value="glass">This is glass / smoke</option>
+              <option value="protect">Keep this untouched</option>
+            </select>
+          </label>
+          <label class="field">
+            How to select
+            <select id="selectMode">
+              <option value="connected">Connected region only</option>
+              <option value="similar">Similar colors across image</option>
+            </select>
+          </label>
+          <div class="slider">
+            <label for="regionTolerance">Selection range <strong id="regionToleranceValue">0.12</strong></label>
+            <input id="regionTolerance" type="range" min="0.02" max="0.6" step="0.01" value="0.12">
+          </div>
+          <label class="inline-check region-check">
+            <input id="autoDarkCleanup" type="checkbox" checked>
+            Auto-clear specks
+          </label>
+          <div class="slider">
+            <label for="darkThreshold">Speck sensitivity <strong id="darkThresholdValue">0.12</strong></label>
+            <input id="darkThreshold" type="range" min="0.02" max="0.45" step="0.01" value="0.12">
+          </div>
+          <div class="slider">
+            <label for="darkIslandMax">Max speck size <strong id="darkIslandMaxValue">600</strong></label>
+            <input id="darkIslandMax" type="range" min="20" max="5000" step="20" value="600">
+          </div>
+          <div class="region-actions">
+            <button id="undoRegion" type="button">Undo last</button>
+            <button id="clearRegions" type="button">Clear regions</button>
+          </div>
+          <p id="regionSummary" class="region-summary">No regions marked yet.</p>
+        </div>
+
+        <details class="advanced-box">
+          <summary>Advanced tuning</summary>
+          <div class="field color-row advanced-color">
+            <label>
+              Custom background color
+              <input id="customColor" type="color" value="#000000">
+            </label>
+            <span class="field-note">Usually not needed; picking a color switches to custom-background mode.</span>
+          </div>
+          <div class="slider">
+            <label for="exposure">Faint-glow retention <strong id="exposureValue">0.00</strong></label>
+            <input id="exposure" type="range" min="-2" max="2" step="0.05" value="0">
+          </div>
+          <div class="slider">
+            <label for="gamma">Alpha gradation <strong id="gammaValue">1.00</strong></label>
+            <input id="gamma" type="range" min="0.3" max="3" step="0.05" value="1">
+          </div>
+          <div class="slider">
+            <label for="blackPoint">Crush black bg <strong id="blackPointValue">0.02</strong></label>
+            <input id="blackPoint" type="range" min="0" max="0.8" step="0.01" value="0.02">
+          </div>
+          <div class="slider">
+            <label for="whitePoint">Highlight retention <strong id="whitePointValue">1.00</strong></label>
+            <input id="whitePoint" type="range" min="0.2" max="1" step="0.01" value="1">
+          </div>
+          <div class="slider">
+            <label for="alphaStrength">Alpha strength <strong id="alphaStrengthValue">1.00</strong></label>
+            <input id="alphaStrength" type="range" min="0.2" max="2" step="0.05" value="1">
+          </div>
+          <div class="slider">
+            <label for="tolerance">Background threshold <strong id="toleranceValue">0.22</strong></label>
+            <input id="tolerance" type="range" min="0.02" max="0.8" step="0.01" value="0.22">
+          </div>
+          <div class="slider">
+            <label for="despill">De-spill green / cyan <strong id="despillValue">0.45</strong></label>
+            <input id="despill" type="range" min="0" max="1" step="0.05" value="0.45">
+          </div>
+        </details>
+
+      </aside>
+    </section>
+
+    <footer class="foot">
+      <span id="message">All processing happens locally in your browser; images are never uploaded.</span>
+    </footer>
+  </main>
+
+  <script src="./app.en.js"></script>
+</body>
+</html>
