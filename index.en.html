@@ -84,6 +84,13 @@
             <input id="lowMemory" type="checkbox" checked>
             Low-memory mode
           </label>
+          <div class="zoom-controls" aria-label="Preview zoom">
+            <button id="zoomOut" type="button" aria-label="Zoom out preview">-</button>
+            <input id="zoomLevel" type="range" min="1" max="8" step="0.05" value="1" aria-label="Preview zoom level">
+            <strong id="zoomValue">100%</strong>
+            <button id="zoomIn" type="button" aria-label="Zoom in preview">+</button>
+            <button id="zoomReset" type="button">Reset</button>
+          </div>
         </div>
         <div class="quick-controls" aria-label="Common adjustments">
           <div class="slider">
@@ -174,7 +181,7 @@
             <input id="darkIslandMax" type="range" min="20" max="5000" step="20" value="600">
           </div>
           <div class="region-actions">
-            <button id="undoRegion" type="button">Undo last</button>
+            <button id="undoRegion" type="button" aria-keyshortcuts="Control+Z">Undo last (Ctrl+Z)</button>
             <button id="clearRegions" type="button">Clear regions</button>
           </div>
           <p id="regionSummary" class="region-summary">No regions marked yet.</p>

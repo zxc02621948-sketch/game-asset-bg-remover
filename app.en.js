@@ -8,6 +8,10 @@ const HARD_TOTAL_PIXELS = 200_000_000;
 const ALIGN_TOOL_URL = "https://zxc02621948-sketch.github.io/ai-sprite-align-tool/";
 const BRIDGE_DB_NAME = "gameAssetToolBridge";
 const BRIDGE_STORE_NAME = "assets";
+const MIN_PREVIEW_ZOOM = 1;
+const MAX_PREVIEW_ZOOM = 8;
+const PREVIEW_ZOOM_STEP = 0.15;
+const PREVIEW_WHEEL_SPEED = 0.0015;
 
 const state = {
   items: [],
@@ -16,6 +20,14 @@ const state = {
   renderToken: 0,
   busy: false,
   lastPreview: null,
+  previewImage: null,
+  viewportRenderFrame: 0,
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+  isPanning: false,
+  panStart: null,
+  ignoreNextClick: false,
 };
 
 const el = {
@@ -32,6 +44,11 @@ const el = {
   clearAll: document.getElementById("clearAll"),
   previewTitle: document.getElementById("previewTitle"),
   previewCanvas: document.getElementById("previewCanvas"),
+  zoomOut: document.getElementById("zoomOut"),
+  zoomIn: document.getElementById("zoomIn"),
+  zoomReset: document.getElementById("zoomReset"),
+  zoomLevel: document.getElementById("zoomLevel"),
+  zoomValue: document.getElementById("zoomValue"),
   canvasWrap: document.getElementById("canvasWrap"),
   previewBg: document.getElementById("previewBg"),
   lowMemory: document.getElementById("lowMemory"),
@@ -244,14 +261,25 @@ el.exportCurrent.addEventListener("click", exportCurrent);
 el.sendToAlign.addEventListener("click", sendCurrentToAlignTool);
 el.exportZip.addEventListener("click", exportZip);
 el.previewCanvas.addEventListener("click", handlePreviewClick);
-el.undoRegion.addEventListener("click", undoRegion);
+el.previewCanvas.addEventListener("wheel", handlePreviewWheel, { passive: false });
+el.previewCanvas.addEventListener("pointerdown", handlePreviewPointerDown);
+el.previewCanvas.addEventListener("pointermove", handlePreviewPointerMove);
+el.previewCanvas.addEventListener("pointerup", handlePreviewPointerEnd);
+el.previewCanvas.addEventListener("pointercancel", handlePreviewPointerEnd);
+el.zoomOut.addEventListener("click", () => setZoom(state.zoom - PREVIEW_ZOOM_STEP, previewCenter()));
+el.zoomIn.addEventListener("click", () => setZoom(state.zoom + PREVIEW_ZOOM_STEP, previewCenter()));
+el.zoomReset.addEventListener("click", () => resetZoom());
+el.zoomLevel.addEventListener("input", () => setZoom(Number(el.zoomLevel.value), previewCenter()));
+el.undoRegion.addEventListener("click", () => undoRegion());
 el.clearRegions.addEventListener("click", clearRegions);
+document.addEventListener("keydown", handleGlobalKeyDown);
 window.addEventListener("resize", scheduleRender);
 
 applyPreset("blackFx");
 updateStats();
 syncPreviewBackground();
 drawEmptyPreview();
+updateZoomUi();
 setButtonsDisabled(false);
 loadBridgeAssetFromQuery();
 
@@ -365,9 +393,12 @@ function renderThumbs() {
       </span>
     `;
     button.addEventListener("click", () => {
+      const changingSelection = state.selectedId !== item.id;
       state.selectedId = item.id;
+      if (changingSelection) resetZoomState();
       renderThumbs();
       updateRegionSummary();
+      updateZoomUi();
       scheduleRender();
     });
     el.thumbList.appendChild(button);
@@ -466,6 +497,8 @@ function renderPreview() {
 
 function drawEmptyPreview() {
   const canvas = el.previewCanvas;
+  state.lastPreview = null;
+  state.previewImage = null;
   canvas.width = 720;
   canvas.height = 420;
   const ctx = canvas.getContext("2d");
@@ -473,9 +506,34 @@ function drawEmptyPreview() {
   ctx.fillStyle = "#aeb5bd";
   ctx.font = "18px Microsoft JhengHei, sans-serif";
   ctx.fillText("Import an image to start", 28, 46);
+  updateZoomUi();
 }
 
 function drawImageDataToPreview(imageData) {
+  cachePreviewImage(imageData);
+  drawCachedPreview();
+}
+
+function cachePreviewImage(imageData) {
+  const image = document.createElement("canvas");
+  image.width = imageData.width;
+  image.height = imageData.height;
+  image.getContext("2d").putImageData(imageData, 0, 0);
+  state.previewImage = image;
+}
+
+function scheduleViewportRender() {
+  if (state.viewportRenderFrame) return;
+  state.viewportRenderFrame = requestAnimationFrame(() => {
+    state.viewportRenderFrame = 0;
+    drawCachedPreview();
+  });
+}
+
+function drawCachedPreview() {
+  const image = state.previewImage;
+  if (!image) return;
+
   const canvas = el.previewCanvas;
   const rect = el.canvasWrap.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -490,21 +548,22 @@ function drawImageDataToPreview(imageData) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-  const temp = document.createElement("canvas");
-  temp.width = imageData.width;
-  temp.height = imageData.height;
-  temp.getContext("2d").putImageData(imageData, 0, 0);
+  const fitScale = Math.min(cssWidth / image.width, cssHeight / image.height);
+  clampPanForDimensions(cssWidth, cssHeight, image.width, image.height, fitScale);
 
-  const scale = Math.min(cssWidth / imageData.width, cssHeight / imageData.height);
-  const drawWidth = imageData.width * scale;
-  const drawHeight = imageData.height * scale;
-  const x = (cssWidth - drawWidth) / 2;
-  const y = (cssHeight - drawHeight) / 2;
+  const scale = fitScale * state.zoom;
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  const x = (cssWidth - drawWidth) / 2 + state.panX;
+  const y = (cssHeight - drawHeight) / 2 + state.panY;
   state.lastPreview = {
     cssWidth,
     cssHeight,
-    imageWidth: imageData.width,
-    imageHeight: imageData.height,
+    imageWidth: image.width,
+    imageHeight: image.height,
+    fitScale,
+    scale,
+    zoom: state.zoom,
     drawX: x,
     drawY: y,
     drawWidth,
@@ -512,40 +571,34 @@ function drawImageDataToPreview(imageData) {
   };
   ctx.imageSmoothingEnabled = scale < 1;
   if (ctx.imageSmoothingEnabled) ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(temp, x, y, drawWidth, drawHeight);
+  ctx.drawImage(image, x, y, drawWidth, drawHeight);
+  updateZoomUi();
 }
 
 function handlePreviewClick(event) {
-  const item = selectedItem();
-  if (!item || el.regionTool.value === "none" || !state.lastPreview) return;
-
-  const rect = el.previewCanvas.getBoundingClientRect();
-  const px = event.clientX - rect.left;
-  const py = event.clientY - rect.top;
-  const preview = state.lastPreview;
-  if (
-    px < preview.drawX ||
-    py < preview.drawY ||
-    px > preview.drawX + preview.drawWidth ||
-    py > preview.drawY + preview.drawHeight
-  ) {
+  if (state.ignoreNextClick) {
+    state.ignoreNextClick = false;
     return;
   }
 
-  const x = (px - preview.drawX) / preview.drawWidth;
-  const y = (py - preview.drawY) / preview.drawHeight;
+  const item = selectedItem();
+  if (!item || el.regionTool.value === "none" || !state.lastPreview) return;
+
+  const point = previewPointToImage(event.clientX, event.clientY);
+  if (!point) return;
+
   const source = makeSourceCanvas(item, 512);
   const ctx = source.getContext("2d");
-  const sx = Math.max(0, Math.min(source.width - 1, Math.round(x * (source.width - 1))));
-  const sy = Math.max(0, Math.min(source.height - 1, Math.round(y * (source.height - 1))));
+  const sx = Math.max(0, Math.min(source.width - 1, Math.round(point.x * (source.width - 1))));
+  const sy = Math.max(0, Math.min(source.height - 1, Math.round(point.y * (source.height - 1))));
   const pixel = ctx.getImageData(sx, sy, 1, 1).data;
 
   item.regions.push({
     type: el.regionTool.value,
     selectMode: el.selectMode.value,
     tolerance: Number(el.regionTolerance.value),
-    x,
-    y,
+    x: point.x,
+    y: point.y,
     color: [pixel[0] / 255, pixel[1] / 255, pixel[2] / 255],
   });
 
@@ -554,12 +607,212 @@ function handlePreviewClick(event) {
   scheduleRender();
 }
 
-function undoRegion() {
+function undoRegion(showMessage = false) {
   const item = selectedItem();
-  if (!item || !item.regions.length) return;
+  if (!item || !item.regions.length) {
+    if (showMessage) setMessage("No marked regions to undo.");
+    return;
+  }
   item.regions.pop();
   updateRegionSummary();
+  if (showMessage) setMessage("Undid the last marked region.");
   scheduleRender();
+}
+
+function handleGlobalKeyDown(event) {
+  const key = event.key ? event.key.toLowerCase() : "";
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || key !== "z" || isTypingInField()) return;
+  event.preventDefault();
+  undoRegion(true);
+}
+
+function isTypingInField() {
+  const active = document.activeElement;
+  if (!active) return false;
+  if (active.tagName === "TEXTAREA") return true;
+  if (active.tagName !== "INPUT") return false;
+  return !["button", "checkbox", "color", "file", "radio", "range"].includes(active.type);
+}
+
+function previewCenter() {
+  if (!state.lastPreview) return null;
+  return {
+    x: state.lastPreview.cssWidth / 2,
+    y: state.lastPreview.cssHeight / 2,
+  };
+}
+
+function setZoom(nextZoom, center = null) {
+  const previousZoom = state.zoom;
+  const zoom = clampValue(Number(nextZoom) || MIN_PREVIEW_ZOOM, MIN_PREVIEW_ZOOM, MAX_PREVIEW_ZOOM);
+  if (Math.abs(zoom - previousZoom) < 0.001) {
+    updateZoomUi();
+    return;
+  }
+
+  const preview = state.lastPreview;
+  if (center && preview) {
+    const imageX = (center.x - preview.drawX) / preview.drawWidth;
+    const imageY = (center.y - preview.drawY) / preview.drawHeight;
+    state.zoom = zoom;
+
+    const nextScale = preview.fitScale * state.zoom;
+    const nextDrawWidth = preview.imageWidth * nextScale;
+    const nextDrawHeight = preview.imageHeight * nextScale;
+    const baseX = (preview.cssWidth - nextDrawWidth) / 2;
+    const baseY = (preview.cssHeight - nextDrawHeight) / 2;
+    state.panX = center.x - imageX * nextDrawWidth - baseX;
+    state.panY = center.y - imageY * nextDrawHeight - baseY;
+  } else {
+    state.zoom = zoom;
+    if (state.zoom <= MIN_PREVIEW_ZOOM) {
+      state.panX = 0;
+      state.panY = 0;
+    }
+  }
+
+  clampPreviewPan();
+  updateZoomUi();
+  scheduleViewportRender();
+}
+
+function resetZoom() {
+  resetZoomState();
+  updateZoomUi();
+  scheduleViewportRender();
+}
+
+function resetZoomState() {
+  state.zoom = MIN_PREVIEW_ZOOM;
+  state.panX = 0;
+  state.panY = 0;
+  state.isPanning = false;
+  state.panStart = null;
+  state.ignoreNextClick = false;
+}
+
+function updateZoomUi() {
+  if (!el.zoomLevel) return;
+  const hasItem = Boolean(selectedItem());
+  const disabled = state.busy || !hasItem;
+  el.zoomLevel.value = String(state.zoom);
+  el.zoomValue.textContent = `${Math.round(state.zoom * 100)}%`;
+  el.zoomLevel.disabled = disabled;
+  el.zoomOut.disabled = disabled || state.zoom <= MIN_PREVIEW_ZOOM + 0.001;
+  el.zoomIn.disabled = disabled || state.zoom >= MAX_PREVIEW_ZOOM - 0.001;
+  el.zoomReset.disabled = disabled || state.zoom <= MIN_PREVIEW_ZOOM + 0.001;
+  el.canvasWrap.classList.toggle("zoomed", !disabled && state.zoom > MIN_PREVIEW_ZOOM + 0.001);
+}
+
+function handlePreviewWheel(event) {
+  if (!selectedItem()) return;
+  event.preventDefault();
+
+  const rect = el.previewCanvas.getBoundingClientRect();
+  const factor = Math.exp(-event.deltaY * PREVIEW_WHEEL_SPEED);
+  setZoom(state.zoom * factor, {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  });
+}
+
+function handlePreviewPointerDown(event) {
+  if (!selectedItem() || state.zoom <= MIN_PREVIEW_ZOOM + 0.001) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  state.isPanning = true;
+  state.panStart = {
+    x: event.clientX,
+    y: event.clientY,
+    panX: state.panX,
+    panY: state.panY,
+    moved: false,
+  };
+  el.canvasWrap.classList.add("panning");
+  el.previewCanvas.setPointerCapture?.(event.pointerId);
+}
+
+function handlePreviewPointerMove(event) {
+  if (!state.isPanning || !state.panStart) return;
+  const dx = event.clientX - state.panStart.x;
+  const dy = event.clientY - state.panStart.y;
+  if (Math.hypot(dx, dy) < 2 && !state.panStart.moved) return;
+
+  event.preventDefault();
+  state.panStart.moved = true;
+  state.panX = state.panStart.panX + dx;
+  state.panY = state.panStart.panY + dy;
+  clampPreviewPan();
+  scheduleViewportRender();
+}
+
+function handlePreviewPointerEnd(event) {
+  if (!state.isPanning) return;
+  const moved = Boolean(state.panStart?.moved);
+  state.isPanning = false;
+  state.panStart = null;
+  el.canvasWrap.classList.remove("panning");
+  try {
+    el.previewCanvas.releasePointerCapture?.(event.pointerId);
+  } catch (error) {
+    // Pointer capture may already be released by the browser.
+  }
+
+  if (moved) {
+    state.ignoreNextClick = true;
+    window.setTimeout(() => {
+      state.ignoreNextClick = false;
+    }, 250);
+  }
+}
+
+function clampPreviewPan() {
+  const preview = state.lastPreview;
+  if (!preview) {
+    state.panX = 0;
+    state.panY = 0;
+    return;
+  }
+  clampPanForDimensions(preview.cssWidth, preview.cssHeight, preview.imageWidth, preview.imageHeight, preview.fitScale);
+}
+
+function clampPanForDimensions(cssWidth, cssHeight, imageWidth, imageHeight, fitScale) {
+  if (state.zoom <= MIN_PREVIEW_ZOOM + 0.001) {
+    state.panX = 0;
+    state.panY = 0;
+    return;
+  }
+
+  const drawWidth = imageWidth * fitScale * state.zoom;
+  const drawHeight = imageHeight * fitScale * state.zoom;
+  const maxPanX = Math.max(0, (drawWidth - cssWidth) / 2);
+  const maxPanY = Math.max(0, (drawHeight - cssHeight) / 2);
+  state.panX = clampValue(state.panX, -maxPanX, maxPanX);
+  state.panY = clampValue(state.panY, -maxPanY, maxPanY);
+}
+
+function previewPointToImage(clientX, clientY) {
+  const rect = el.previewCanvas.getBoundingClientRect();
+  const px = clientX - rect.left;
+  const py = clientY - rect.top;
+  const preview = state.lastPreview;
+  if (
+    !preview ||
+    px < preview.drawX ||
+    py < preview.drawY ||
+    px > preview.drawX + preview.drawWidth ||
+    py > preview.drawY + preview.drawHeight
+  ) {
+    return null;
+  }
+
+  return {
+    x: (px - preview.drawX) / preview.drawWidth,
+    y: (py - preview.drawY) / preview.drawHeight,
+  };
+}
+
+function clampValue(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function clearRegions() {
@@ -1421,6 +1674,8 @@ function clearAll() {
   state.items = [];
   state.selectedId = null;
   state.lastPreview = null;
+  state.previewImage = null;
+  resetZoomState();
   renderThumbs();
   updateStats();
   updateRegionSummary();
@@ -1487,6 +1742,7 @@ function updateSliderLabels() {
 
 function syncPreviewBackground() {
   el.canvasWrap.className = `canvas-wrap ${el.previewBg.value}`;
+  updateZoomUi();
 }
 
 function setButtonsDisabled(disabled) {
@@ -1495,6 +1751,7 @@ function setButtonsDisabled(disabled) {
   el.exportZip.disabled = disabled || !state.items.length;
   el.sampleCorner.disabled = disabled || !state.items.length;
   el.fileInput.disabled = disabled;
+  updateZoomUi();
 }
 
 function selectedItem() {
