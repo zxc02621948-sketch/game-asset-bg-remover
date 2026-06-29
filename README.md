@@ -148,6 +148,12 @@ https://zxc02621948-sketch.github.io/game-asset-bg-remover/
 - 使用瀏覽器本地 API 進行圖片解碼與匯出
 - ZIP 匯出由前端直接產生
 
+## ☕ 支持作者
+
+這個工具是免費且開源的。如果它對你有幫助，歡迎請我喝杯咖啡，支持我持續維護與開發更多免費工具：
+
+👉 https://ko-fi.com/kuanming
+
 ## 授權
 
 程式碼授權可依 repository 設定調整。若尚未決定，建議使用 MIT License。

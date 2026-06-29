@@ -537,8 +537,25 @@ canvas {
   min-height: 46px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 0 16px;
   color: var(--muted);
+}
+
+.support-link {
+  flex: none;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+  opacity: 0.85;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.support-link:hover {
+  opacity: 1;
+  color: var(--accent);
 }
 
 .drop-active {
