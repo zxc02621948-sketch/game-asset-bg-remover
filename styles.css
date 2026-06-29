@@ -646,16 +646,17 @@ canvas {
   display: inline-block;
   margin-top: 8px;
   margin-left: 8px;
-  padding: 4px 12px;
+  padding: 7px 16px;
   border: 1px solid var(--accent);
   border-radius: 999px;
-  color: var(--accent);
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-decoration: none;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-.support-btn:hover {
   background: var(--accent);
   color: var(--bg);
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition: filter 0.2s ease, transform 0.1s ease;
+}
+.support-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
 }
