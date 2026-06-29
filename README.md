@@ -1,5 +1,7 @@
 # 遊戲素材去背助手
 
+*(English version below ↓)*
+
 一個在瀏覽器本機執行的遊戲素材去背工具，主要用來處理 AI 生成素材、特效素材、綠幕素材、黑底光效、白底玻璃與棋盤格背景圖片。
 
 工具不需要上傳圖片到伺服器，所有處理都在使用者自己的瀏覽器中完成。適合用來快速整理遊戲素材、特效圖、技能圖、透明 PNG 素材與批量去背流程。
@@ -164,3 +166,59 @@ https://zxc02621948-sketch.github.io/game-asset-bg-remover/
 ## 授權
 
 程式碼授權可依 repository 設定調整。若尚未決定，建議使用 MIT License。
+
+---
+
+# English: Game Asset BG Remover
+
+A browser-based background remover for game assets — built for AI-generated art, VFX sprites, green-screen captures, black-background glows, white-background glass, and checkerboard images. Everything runs locally in your browser; images are never uploaded.
+
+## Demo
+GitHub Pages: https://zxc02621948-sketch.github.io/game-asset-bg-remover/
+
+### Green-screen before / after
+The right side is a transparent PNG shown on a checkerboard preview; the checkerboard is not part of the output.
+
+![Green-screen before and after](demo/green-screen-before-after.png)
+
+## Features
+- Drag-and-drop batch processing (PNG / JPG / WebP), up to 10 images at a time in v1
+- Remove black, white, green-screen, checkerboard, or a custom background color
+- Stronger cleanup of common gray/white checkerboard residue
+- Pick a processing mode by asset type: mixed / smoke & glow / solid object
+- Handy presets: black-bg object, smoke & glow, checkerboard, glass/lens, green screen
+- Live preview: result / black-and-white mask / original
+- Switch preview backdrop: checkerboard / game-dark / black / white
+- Common adjustments: cleanup strength, detail retention, edge feathering, smart edge cleanup, edge-cleanup strength
+- Click-to-touch-up: clear residue, mark glass/smoke areas, mark protected areas
+- Connected-region or whole-image similar-color selection
+- Auto-remove small dark specks in semi-transparent areas
+- Green-screen removal with green/cyan fringe reduction
+- Export the current image as a transparent PNG, or batch-export a ZIP
+- Batch performance hints: count, max resolution, total pixels, estimated memory
+
+## How to use
+1. Open `index.html`
+2. Import or drag in images
+3. Pick the background type
+4. Pick the asset type
+5. Use a preset, or tweak cleanup strength and detail retention
+6. Use click-to-touch-up for leftover residue
+7. Export PNG or ZIP
+
+## Works with the Sprite Align Tool
+Pairs with the [AI Sprite Frame Align Tool](https://zxc02621948-sketch.github.io/ai-sprite-align-tool/). Suggested flow: remove the background here → "Send to Frame Align" → set rows/columns and align each frame → export a clean transparent spritesheet. "Send to Frame Align" stashes the current image in your browser and opens the align tool with it loaded.
+
+## Changelog
+### 2026-06-28
+- Scroll-wheel zoom in the preview, plus zoom in / out / reset buttons and a zoom indicator
+- Ctrl + Z to undo the last touch-up
+
+## Notes & limits
+All processing happens locally in your browser; images are never uploaded. Result quality depends on the source (background too close to the subject color, compression noise, transparent materials blended into the background, very fine effect edges, or glow/smoke/glass mixed with solid objects). It does **not** use an AI model — it relies on image math, color detection, and your manual touch-ups. Always confirm asset licensing and your final output before commercial use.
+
+## ☕ Support
+This tool is free and open source. If it helps you, consider buying me a coffee: https://ko-fi.com/kuanming
+
+## License
+MIT recommended (adjust per repository settings).
