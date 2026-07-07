@@ -54,6 +54,15 @@ Pairs with the [AI Sprite Frame Align Tool](https://zxc02621948-sketch.github.io
 ## Notes & limits
 All processing happens locally in your browser; images are never uploaded. Result quality depends on the source (background too close to the subject color, compression noise, transparent materials blended into the background, very fine effect edges, or glow/smoke/glass mixed with solid objects). It does **not** use an AI model — it relies on image math, color detection, and your manual touch-ups. Always confirm asset licensing and your final output before commercial use.
 
+## 🧰 My free tools
+
+Free tools I build for AI creators (browser-based unless noted):
+
+- [AI Sprite Animator](https://zxc02621948-sketch.github.io/ai-sprite-animator/) — green-screen animation video → transparent sprite sheet
+- [AI Sprite Align Tool](https://zxc02621948-sketch.github.io/ai-sprite-align-tool/) — align & stabilize sprite-sheet frames
+- **Game Asset BG Remover** — remove backgrounds from game art · **you're here**
+- [Local Server Launcher](https://github.com/zxc02621948-sketch/server-launcher) — one-click desktop GUI to run your local dev servers (Windows)
+
 ## ☕ Support
 This tool is free and open source. If it helps you, consider buying me a coffee: https://ko-fi.com/kuanming
 
@@ -140,6 +149,15 @@ GitHub Pages Demo：https://zxc02621948-sketch.github.io/game-asset-bg-remover/
 
 ### 技術說明
 純前端工具、不需後端;使用 HTML / CSS / JavaScript,影像處理用 Canvas,圖片解碼與匯出用瀏覽器本地 API,ZIP 由前端直接產生。
+
+### 🧰 我的免費工具
+
+我為 AI 創作者做的免費工具(未註明皆為瀏覽器工具):
+
+- [AI Sprite Animator](https://zxc02621948-sketch.github.io/ai-sprite-animator/) —— 綠幕動畫影片 → 透明 sprite sheet
+- [AI 動畫格對齊工具](https://zxc02621948-sketch.github.io/ai-sprite-align-tool/) —— 對齊、穩定 sprite sheet 每一格
+- **遊戲素材去背助手** —— 幫遊戲素材去背 · **你在這**
+- [本地服務器啟動台](https://github.com/zxc02621948-sketch/server-launcher) —— 一鍵啟動本地 dev server 的桌面 GUI(Windows)
 
 ### ☕ 支持作者
 這個工具是免費且開源的。如果它對你有幫助,歡迎請我喝杯咖啡,支持我持續維護與開發更多免費工具:
